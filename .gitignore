@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pytype/
+
+# Virtualenvs
+.venv/
+venv/
+env/
+.envrc
+
+# Environment files (keep examples)
+.env
+**/.env
+!.env.example
+
+# Logs / local runtime artifacts
+*.log
+sakhi_tokens.jsonl
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Cursor project artifacts (optional)
+.cursor/
+
+# Docs / specs (explicitly ignore these)
+/FSD-by-amit/
+/AI\ Pipeline.docx
+/AI\ Components.docx
+/ClinicDesk\ AI\ —\ Phase\ 1\ Technical\ Alignment.pdf
+/ClinicDesk_AI_Engineering_Blueprint.pptx.pdf
+
