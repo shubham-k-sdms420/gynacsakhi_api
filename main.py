@@ -1,6 +1,7 @@
 """
 Sakhi - Gynac Clinic AI Assistant API
-FastAPI endpoint powered by Gemini (model and generation params from .env).
+FastAPI endpoint with pluggable inference provider (Gemini or OpenRouter).
+Provider and model are controlled via INFERENCE_PROVIDER / INFERENCE_MODEL env vars.
 """
 
 from contextlib import asynccontextmanager
@@ -10,23 +11,23 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, Response
-from google import genai
-from google.genai import types
 from pydantic import BaseModel, Field
 
 from config import get_settings
 from context_data import CLINIC_CONTEXT, SYSTEM_PROMPT
+from inference import InferenceProvider, build_provider
 
-client: genai.Client | None = None
+_provider: InferenceProvider | None = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global client
-    settings = get_settings()
-    client = genai.Client(api_key=settings.gemini_api_key)
+    global _provider
+    _provider = build_provider(get_settings())
     yield
-    client = None
+    if _provider is not None:
+        _provider.close()
+    _provider = None
 
 
 def _app() -> FastAPI:
@@ -462,10 +463,10 @@ def ui():
 @app.post("/test/response", response_model=QueryResponse)
 def generate_response(payload: QueryRequest):
     """
-    Takes user text input and returns Sakhi's response
-    based on clinic context using the configured Gemini model.
+    Takes user text input and returns Sakhi's response.
+    Provider and model are selected via INFERENCE_PROVIDER / INFERENCE_MODEL env vars.
     """
-    if client is None:
+    if _provider is None:
         raise HTTPException(status_code=503, detail="Model client not initialized")
 
     settings = get_settings()
@@ -484,21 +485,10 @@ def generate_response(payload: QueryRequest):
     )
 
     try:
-        response = client.models.generate_content(
-            model=settings.gemini_model,
-            contents=payload.text,
-            config=types.GenerateContentConfig(
-                system_instruction=system_instruction,
-                temperature=settings.gemini_temperature,
-                max_output_tokens=settings.gemini_max_output_tokens,
-            ),
+        result = _provider.generate(
+            user_text=payload.text,
+            system_instruction=system_instruction,
         )
-        usage = getattr(response, "usage_metadata", None)
-        input_tokens = getattr(usage, "prompt_token_count", None) if usage else None
-        output_tokens = (
-            getattr(usage, "candidates_token_count", None) if usage else None
-        )
-        total_tokens = getattr(usage, "total_token_count", None) if usage else None
 
         if settings.token_log_enabled:
             try:
@@ -507,12 +497,12 @@ def generate_response(payload: QueryRequest):
                 )
                 record = {
                     "ts": datetime.now(timezone.utc).isoformat(),
-                    "model": settings.gemini_model,
+                    "model": result.model,
                     "patient_name": payload.patient_name,
                     "text": payload.text,
-                    "input_tokens": input_tokens,
-                    "output_tokens": output_tokens,
-                    "total_tokens": total_tokens,
+                    "input_tokens": result.input_tokens,
+                    "output_tokens": result.output_tokens,
+                    "total_tokens": result.total_tokens,
                 }
                 with open(
                     Path(settings.token_log_path).expanduser(),
@@ -521,15 +511,14 @@ def generate_response(payload: QueryRequest):
                 ) as f:
                     f.write(json.dumps(record, ensure_ascii=False) + "\n")
             except Exception:
-                # Logging should never break the user request.
                 pass
 
         return QueryResponse(
-            response=response.text.strip(),
-            model=settings.gemini_model,
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            total_tokens=total_tokens,
+            response=result.text,
+            model=result.model,
+            input_tokens=result.input_tokens,
+            output_tokens=result.output_tokens,
+            total_tokens=result.total_tokens,
         )
     except Exception as e:
         raise HTTPException(

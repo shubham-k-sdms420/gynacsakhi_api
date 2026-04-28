@@ -30,6 +30,23 @@ class Settings(BaseSettings):
     gemini_temperature: float = Field(default=0.6)
     gemini_max_output_tokens: int = Field(default=600)
 
+    # --- Inference selection ---
+    inference_provider: str = Field(
+        default="gemini",
+        description="Which inference provider to use: gemini | openrouter",
+    )
+    inference_model: str | None = Field(
+        default=None,
+        description="Optional model override for the selected provider",
+    )
+
+    # --- OpenRouter (OpenAI-compatible) ---
+    openrouter_api_key: str | None = Field(default=None, description="OpenRouter API key")
+    openrouter_model: str = Field(default="openai/gpt-4o-mini")
+    openrouter_base_url: str = Field(default="https://openrouter.ai/api/v1")
+    openrouter_temperature: float = Field(default=0.6)
+    openrouter_max_output_tokens: int = Field(default=600)
+
     # --- Logging / observability ---
     token_log_enabled: bool = Field(
         default=True,
@@ -66,6 +83,13 @@ class Settings(BaseSettings):
             return 0.6
         return float(v)
 
+    @field_validator("openrouter_temperature", mode="before")
+    @classmethod
+    def coerce_openrouter_temperature(cls, v):
+        if v is None or (isinstance(v, str) and v.strip() == ""):
+            return 0.6
+        return float(v)
+
     @field_validator("gemini_max_output_tokens", "uvicorn_port", mode="before")
     @classmethod
     def coerce_int(cls, v, info):
@@ -75,6 +99,13 @@ class Settings(BaseSettings):
             if info.field_name == "gemini_max_output_tokens":
                 return 600
             return v
+        return int(v)
+
+    @field_validator("openrouter_max_output_tokens", mode="before")
+    @classmethod
+    def coerce_openrouter_max_tokens(cls, v):
+        if v is None or (isinstance(v, str) and v.strip() == ""):
+            return 600
         return int(v)
 
     @field_validator("uvicorn_reload", "token_log_enabled", mode="before")
