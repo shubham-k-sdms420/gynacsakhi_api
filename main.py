@@ -389,7 +389,7 @@ def ui():
         clearError();
         totals = {{ input: 0, output: 0, total: 0 }};
         renderTotals();
-        appendMessage('bot', "Hello, my name is Sakhi. How can I help you?");
+        appendMessage('bot', "Hello, my name is सखी. How can I help you?");
       }}
 
       clearBtn.addEventListener('click', () => {{
